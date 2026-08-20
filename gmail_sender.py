@@ -1,51 +1,36 @@
 """
 Streamlit uygulamasinda import edilip kullanilir.
-Sifre / App Password YOK, sadece OAuth2 refresh token ile calisir.
+Gmail SMTP + App Password ile calisir (OAuth2 DEGIL).
 
 Kurulum:
-    pip install google-auth google-api-python-client
+    pip install (ek paket gerekmiyor, smtplib Python standart kutuphanesinde)
 
-requirements.txt'e eklenmesi gerekenler:
-    google-auth
-    google-api-python-client
+Streamlit Secrets (Settings > Secrets) icerigi (baslik/section KULLANMA):
 
-Streamlit Secrets (Settings > Secrets) icerigi:
+    GMAIL_USER = "primportfoy@gmail.com"
+    GMAIL_APP_PASSWORD = "xxxxxxxxxxxxxxxx"
 
-    GMAIL_CLIENT_ID = "xxxx.apps.googleusercontent.com"
-    GMAIL_CLIENT_SECRET = "xxxx"
-    GMAIL_REFRESH_TOKEN = "xxxx"
-    GMAIL_SENDER = "sirket-maili@sirketiniz.com"
+Not: GMAIL_APP_PASSWORD, normal Gmail sifren DEGIL. Google hesabinda
+2 adimli dogrulama acik olmali, sonra "Uygulama Sifreleri" (App Passwords)
+sayfasindan 16 haneli bir sifre uretilir. Bu sifreyi asla kod icine yazma,
+sadece Streamlit Secrets'a gir.
 """
 
-import base64
 import re
+import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 
 import streamlit as st
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
 
-SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
-
-
-def _get_gmail_service():
-    """Secrets'taki refresh token ile Gmail servisine baglanir."""
-    creds = Credentials(
-        token=None,
-        refresh_token=st.secrets["GMAIL_REFRESH_TOKEN"],
-        client_id=st.secrets["GMAIL_CLIENT_ID"],
-        client_secret=st.secrets["GMAIL_CLIENT_SECRET"],
-        token_uri="https://oauth2.googleapis.com/token",
-        scopes=SCOPES,
-    )
-    return build("gmail", "v1", credentials=creds)
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = 465  # SSL
 
 
 def secrets_configured() -> bool:
     """Gerekli secret'larin hepsi tanimli mi kontrol eder."""
-    required = ["GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN", "GMAIL_SENDER"]
+    required = ["GMAIL_USER", "GMAIL_APP_PASSWORD"]
     return all(key in st.secrets for key in required)
 
 
@@ -70,7 +55,8 @@ def send_html_email(
 ) -> tuple[bool, str]:
     """
     HTML icerikli, plain-text alternatifli, istege bagli gomulu gorselli (cid)
-    ve istege bagli unsubscribe linkli mail gonderir.
+    ve istege bagli unsubscribe linkli mail gonderir. Gmail SMTP + App Password
+    kullanir.
 
     to: alici mail adresi
     subject: konu
@@ -82,7 +68,8 @@ def send_html_email(
     Donus: (basarili_mi, hata_mesaji) -- basariliysa hata_mesaji bos string
     """
     try:
-        service = _get_gmail_service()
+        gmail_user = st.secrets["GMAIL_USER"]
+        gmail_app_password = st.secrets["GMAIL_APP_PASSWORD"]
 
         final_html = html_body
         if unsubscribe_url:
@@ -100,7 +87,7 @@ def send_html_email(
         # Disina "related" katmani: gomulu resimler icin
         msg = MIMEMultipart("related")
         msg["Subject"] = subject
-        msg["From"] = st.secrets["GMAIL_SENDER"]
+        msg["From"] = gmail_user
         msg["To"] = to
 
         if unsubscribe_url:
@@ -116,8 +103,10 @@ def send_html_email(
                 mime_img.add_header("Content-Disposition", "inline", filename=cid_name)
                 msg.attach(mime_img)
 
-        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
-        service.users().messages().send(userId="me", body={"raw": raw}).execute()
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as server:
+            server.login(gmail_user, gmail_app_password)
+            server.sendmail(gmail_user, [to], msg.as_string())
+
         return True, ""
 
     except Exception as e:
