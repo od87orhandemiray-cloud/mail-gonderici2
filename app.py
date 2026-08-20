@@ -137,11 +137,9 @@ st.info(
 if not secrets_configured():
     st.warning(
         "⚠️ Secrets ayarlanmamış. Streamlit Cloud'da uygulama ayarlarından "
-        "'Secrets' bölümüne şunları ekle:\n\n"
-        'GMAIL_CLIENT_ID = "..."\n'
-        'GMAIL_CLIENT_SECRET = "..."\n'
-        'GMAIL_REFRESH_TOKEN = "..."\n'
-        'GMAIL_SENDER = "sirket-maili@sirketiniz.com"'
+        "'Secrets' bölümüne şunları ekle (başında [section] başlığı OLMADAN):\n\n"
+        'GMAIL_USER = "primportfoy@gmail.com"\n'
+        'GMAIL_APP_PASSWORD = "..."'
     )
 
 can_send = (
